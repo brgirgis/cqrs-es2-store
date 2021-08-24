@@ -12,7 +12,7 @@ description = "Sync implementation of the cqrs-es2 store."
 readme = "README.md"
 documentation = "https://docs.rs/cqrs-es2-store"
 repository = "https://github.com/brgirgis/cqrs-es2-store"
-keywords = ["cqrs", "event-sourcing", "es", "DDD", "command", "query", "sync"]
+keywords = ["cqrs", "event-sourcing", "es", "DDD"]
 
 [features]
 default = ["with-all-sync"]
