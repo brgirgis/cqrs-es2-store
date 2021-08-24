@@ -30,7 +30,7 @@ The main components of this library are:
 To use this library in a sync application, add the following to
 your dependency section in the project's `Cargo.toml`:
 
-````toml
+```toml
 [dependencies]
 # logging
 log = { version = "^0.4", features = [
@@ -53,11 +53,11 @@ cqrs-es2-store = { version = "*", default-features = false, features = [
 
  # postgres driver
  postgres = { version = "^0.19.1", features = ["with-serde_json-1"] }
- ```
+```
 
- # Usage
+# Usage
 
- A full sync store example application is available [here](https://github.com/brgirgis/cqrs-es2-store/tree/master/examples/restful).
+A full sync store example application is available [here](https://github.com/brgirgis/cqrs-es2-store/tree/master/examples/restful).
 
 ## Change Log
 
@@ -66,4 +66,3 @@ A complete history of the change log can be found [here](https://github.com/brgi
 ## TODO
 
 An up-to-date list of development aspirations can be found [here](https://github.com/brgirgis/cqrs-es2-store/blob/master/TODO.md)
-````
