@@ -9,6 +9,13 @@
 
 //! Sync implementation of the cqrs-es2 store.
 //!
+//! [![Publish](https://github.com/brgirgis/cqrs-es2-store/actions/workflows/crates-io.yml/badge.svg)](https://github.com/brgirgis/cqrs-es2-store/actions/workflows/crates-io.yml)
+//! [![Test](https://github.com/brgirgis/cqrs-es2-store/actions/workflows/rust-ci.yml/badge.svg)](https://github.com/brgirgis/cqrs-es2-store/actions/workflows/rust-ci.yml)
+//! [![Latest version](https://img.shields.io/crates/v/cqrs-es2-store)](https://crates.io/crates/cqrs-es2-store)
+//! [![docs](https://img.shields.io/badge/API-docs-blue.svg)](https://docs.rs/cqrs-es2-store)
+//! ![License](https://img.shields.io/crates/l/cqrs-es2-store.svg)
+//!
+//! ---
 //! Provides sync interfaces to different database implementations for
 //! the CQRS system store.
 //!
@@ -24,7 +31,7 @@
 //! - `with-postgres` - sync Postgres store
 //! - `with-all-sync` - all sync drivers (default)
 //!
-//! # Usage
+//! # Installation
 //!
 //! To use this library in a sync application, add the following to
 //! your dependency section in the project's `Cargo.toml`:
@@ -54,9 +61,9 @@
 //! postgres = { version = "^0.19.1", features = ["with-serde_json-1"] }
 //! ```
 //!
-//! # Example
+//! # Usage
 //!
-//! A full sync store example application is available [here](https://github.com/brgirgis/cqrs-es2/tree/master/examples/restful).
+//! A full sync store example application is available [here](https://github.com/brgirgis/cqrs-es2-store/tree/master/examples/restful).
 
 pub use repository::*;
 
