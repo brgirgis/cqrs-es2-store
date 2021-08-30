@@ -1,26 +1,27 @@
 
 all:
 	make clean
-	make build
 
 clean:
 	rm -rf target
 	rm -rf Cargo.lock
 	rm -rf *.log
-	rm -rf demo.db*
+	rm -rf test.db*
 
-build:
-	cargo build
+postgres:
+	cargo run --features with-postgres
 
-test:
-	cargo test
+mysql:
+	cargo run --features with-mysql
 
-up:
-	docker-compose up -d
-	rm -rf demo.db*
+mariadb:
+	cargo run --features with-mariadb
 
-down:
-	docker-compose down
+sqlite:
+	cargo run --features with-sqlite
 
-run:
-	cargo run
+mongodb:
+	cargo run --features with-mongodb
+
+redis:
+	cargo run --features with-redis

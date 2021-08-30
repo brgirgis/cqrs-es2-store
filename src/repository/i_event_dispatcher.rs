@@ -36,7 +36,9 @@ use cqrs_es2::{
 ///     fn dispatch(
 ///         &mut self,
 ///         aggregate_id: &str,
-///         events: &[EventContext<CustomerCommand, CustomerEvent>],
+///         events: &Vec<
+///             EventContext<CustomerCommand, CustomerEvent>,
+///         >,
 ///     ) -> Result<(), Error> {
 ///         for event in events {
 ///             //..
@@ -51,6 +53,6 @@ pub trait IEventDispatcher<C: ICommand, E: IEvent> {
     fn dispatch(
         &mut self,
         aggregate_id: &str,
-        events: &[EventContext<C, E>],
+        events: &Vec<EventContext<C, E>>,
     ) -> Result<(), Error>;
 }

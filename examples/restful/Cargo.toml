@@ -1,11 +1,27 @@
 [package]
 name = "cqrs-restful-demo"
-version = "0.7.0"
+version = "0.1.0"
 authors = [
   "Dave Garred <dave.garred@serverlesstechnology.com>",
   "Bassem Girgis <brgirgis@gmail.com>",
 ]
 edition = "2018"
+
+[features]
+default = []
+
+# sql
+with-postgres = ["postgres", "cqrs-es2-store/with-postgres"]
+with-mysql = ["mysql", "cqrs-es2-store/with-mysql"]
+with-mariadb = ["mysql", "cqrs-es2-store/with-mysql"]
+#with-mssql = ["sql", "cqrs-es2-store/with-mssql"]
+with-sqlite = ["sqlite", "cqrs-es2-store/with-sqlite"]
+
+# documents DBs
+with-mongodb = ["mongodb", "cqrs-es2-store/with-mongodb"]
+
+# key-value DBs
+with-redis = ["redis", "cqrs-es2-store/with-redis"]
 
 [dependencies]
 # logging
@@ -20,15 +36,29 @@ serde = { version = "^1.0.127", features = ["derive"] }
 serde_json = "^1.0.66"
 
 # CQRS framework
-cqrs-es2 = { version = "0.8.0" }
+cqrs-es2 = { version = "0.9.0" }
 
 # Sync postgres store implementation 
-cqrs-es2-store = { path = "../../", default-features = false, features = [
-  "with-postgres",
-] }
+cqrs-es2-store = { path = "../../", default-features = false }
+
+# mysql and mariadb driver
+mysql = { version = "^21.0.1", default-features = false, optional = true }
 
 # postgres driver
-postgres = { version = "^0.19.1", features = ["with-serde_json-1"] }
+postgres = { version = "^0.19.1", default-features = false, features = [
+  "with-serde_json-1",
+], optional = true }
+
+# sqlite driver
+sqlite = { version = "^0.26.0", default-features = false, optional = true }
+
+# mongodb
+mongodb = { version = "2.0.0-beta.3", default-features = false, features = [
+  "sync",
+], optional = true }
+
+# redis
+redis = { version = "^0.21.1", default-features = false, optional = true }
 
 # rest API
 iron = "0.6.1"

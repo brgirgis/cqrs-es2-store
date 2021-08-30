@@ -56,8 +56,8 @@ pub fn bank_account_command(
     };
     match result {
         Ok(_) => Ok(Response::with(status::NoContent)),
-        Err(err) => {
-            let err_payload = match &err {
+        Err(e) => {
+            let err_payload = match &e {
                 Error::UserError(e) => {
                     serde_json::to_string(e).unwrap()
                 },
@@ -80,12 +80,12 @@ fn process_command(
 
     let payload = match serde_json::from_str(event_ser.as_str()) {
         Ok(payload) => payload,
-        Err(err) => {
-            return Err(Error::TechnicalError(err.to_string()));
+        Err(e) => {
+            return Err(Error::TechnicalError(e.to_string()));
         },
     };
 
-    let mut event_store = get_event_store();
+    let mut event_store = get_event_store().unwrap();
 
     let mut metadata = HashMap::new();
     metadata.insert(

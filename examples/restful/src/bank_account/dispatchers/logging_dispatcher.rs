@@ -26,10 +26,9 @@ impl IEventDispatcher<BankAccountCommand, BankAccountEvent>
     fn dispatch(
         &mut self,
         aggregate_id: &str,
-        events: &[EventContext<
-            BankAccountCommand,
-            BankAccountEvent,
-        >],
+        events: &Vec<
+            EventContext<BankAccountCommand, BankAccountEvent>,
+        >,
     ) -> Result<(), Error> {
         for event in events {
             let payload =

@@ -16,8 +16,24 @@ keywords = ["cqrs", "event-sourcing", "es", "DDD"]
 
 [features]
 default = ["with-all-sync"]
+
+# sql
+with-mysql = ["mysql"]
 with-postgres = ["postgres"]
-with-all-sync = ["with-postgres"]
+with-sqlite = ["rusqlite"]
+with-all-sql = ["with-mysql", "with-postgres", "with-sqlite"]
+# documents DBs
+with-mongodb = ["mongodb"]
+
+with-all-doc-db = ["with-mongodb"]
+
+# key-value DBs
+with-redis = ["redis"]
+
+with-all-kv-db = ["with-redis"]
+
+# all sync
+with-all-sync = ["with-all-sql", "with-all-doc-db", "with-all-kv-db"]
 
 [dependencies]
 # logging
@@ -28,18 +44,26 @@ serde = { version = "^1.0.127", features = ["derive"] }
 serde_json = "^1.0.66"
 
 # CQRS framework
-cqrs-es2 = { version = "0.8.0" }
+cqrs-es2 = { version = "0.9.0" }
+
+# mysql and mariadb driver
+mysql = { version = "^21.0.1", optional = true }
 
 # postgres driver
 postgres = { version = "^0.19.1", features = [
   "with-serde_json-1",
 ], optional = true }
 
-# mysql and mariadb driver
-mysql = { version = "^21.0.1", optional = true }
-
 # sqlite driver
-sqlite = { version = "^0.26.0", optional = true }
+rusqlite = { version = "^0.25.3", features = ["bundled"], optional = true }
+
+# mongodb
+mongodb = { version = "2.0.0-beta.3", default-features = false, features = [
+  "sync",
+], optional = true }
+
+# redis
+redis = { version = "^0.21.1", default-features = false, optional = true }
 
 [dev-dependencies]
 uuid = { version = "0.8.2", features = ["v4"] }

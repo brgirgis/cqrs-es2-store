@@ -9,7 +9,7 @@ use cqrs_es2::{
     EventContext,
 };
 
-use crate::repository::IEventDispatcher;
+use crate::IEventDispatcher;
 
 pub struct CustomDispatcher {
     events: Arc<
@@ -23,7 +23,7 @@ impl CustomDispatcher {
             RwLock<Vec<EventContext<CustomerCommand, CustomerEvent>>>,
         >
     ) -> Self {
-        CustomDispatcher { events }
+        Self { events }
     }
 }
 
@@ -33,7 +33,7 @@ impl IEventDispatcher<CustomerCommand, CustomerEvent>
     fn dispatch(
         &mut self,
         _aggregate_id: &str,
-        events: &[EventContext<CustomerCommand, CustomerEvent>],
+        events: &Vec<EventContext<CustomerCommand, CustomerEvent>>,
     ) -> Result<(), Error> {
         for event in events {
             let mut event_list = self.events.write().unwrap();

@@ -19,7 +19,7 @@ configuration.
 
 Clone this repository:
 
-    git clone https://github.com/brgirgis/cqrs-es2
+    git clone https://github.com/brgirgis/cqrs-es2-store
 
 Start the docker stack and enter the project folder:
 

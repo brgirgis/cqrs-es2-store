@@ -18,17 +18,17 @@ pub trait IQueryStore<
     A: IAggregate<C, E>,
     Q: IQuery<C, E>,
 >: IEventDispatcher<C, E> {
-    /// loads the query
-    fn load(
-        &mut self,
-        aggregate_id: &str,
-    ) -> Result<QueryContext<C, E, Q>, Error>;
-
-    /// commits the query
-    fn commit(
+    /// saves the updated query
+    fn save_query(
         &mut self,
         context: QueryContext<C, E, Q>,
     ) -> Result<(), Error>;
+
+    /// loads the most recent query
+    fn load_query(
+        &mut self,
+        aggregate_id: &str,
+    ) -> Result<QueryContext<C, E, Q>, Error>;
 
     /// used as a default implementation for dispatching
     fn dispatch_events(
@@ -36,7 +36,7 @@ pub trait IQueryStore<
         aggregate_id: &str,
         events: &[EventContext<C, E>],
     ) -> Result<(), Error> {
-        let mut context = match self.load(aggregate_id) {
+        let mut context = match self.load_query(aggregate_id) {
             Ok(x) => x,
             Err(e) => {
                 return Err(e);
@@ -49,6 +49,6 @@ pub trait IQueryStore<
 
         context.version += 1;
 
-        self.commit(context)
+        self.save_query(context)
     }
 }

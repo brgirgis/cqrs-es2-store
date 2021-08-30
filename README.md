@@ -23,9 +23,16 @@ The main components of this library are:
 ## Features
 
 - `with-postgres` - sync Postgres store
+- `with-mysql` - sync MySQL store
+- `with-sqlite` - sync SQLite store
+- `with-all-sql` - all SQL drivers
+- `with-mongodb` - sync MongoDB store
+- `with-all-doc-db` - all doc DBs drivers
+- `with-redis` - sync Redis store
+- `with-all-kv-db` - all key-value DBs drivers
 - `with-all-sync` - all sync drivers (default)
 
-# Installation
+## Installation
 
 To use this library in a sync application, add the following to
 your dependency section in the project's `Cargo.toml`:
@@ -43,6 +50,8 @@ fern = "^0.5"
 serde = { version = "^1.0.127", features = ["derive"] }
 serde_json = "^1.0.66"
 
+async-trait = "^0.1"
+
 # CQRS framework
 cqrs-es2 = { version = "*"}
 
@@ -55,9 +64,9 @@ cqrs-es2-store = { version = "*", default-features = false, features = [
  postgres = { version = "^0.19.1", features = ["with-serde_json-1"] }
 ```
 
-# Usage
+## Usage
 
-A full sync store example application is available [here](https://github.com/brgirgis/cqrs-es2-store/tree/master/examples/restful).
+Full sync store example applications are available [here](https://github.com/brgirgis/cqrs-es2-store/tree/master/examples).
 
 ## Change Log
 

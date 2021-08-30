@@ -25,9 +25,9 @@ pub fn bank_account_query(req: &mut Request) -> IronResult<Response> {
         .unwrap_or("")
         .to_string();
 
-    let mut query_store = get_query_store();
+    let mut query_store = get_query_store().unwrap();
 
-    let query = match query_store.load(&query_id) {
+    let query = match query_store.load_query(&query_id) {
         Err(_e) => {
             return Ok(Response::with(status::BadRequest));
         },
