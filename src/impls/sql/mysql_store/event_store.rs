@@ -1,9 +1,14 @@
-use std::{
-    collections::HashMap,
-    marker::PhantomData,
+use log::{
+    debug,
+    trace,
 };
+use std::marker::PhantomData;
 
-use mysql::PooledConn;
+use mysql::{
+    prelude::Queryable,
+    PooledConn,
+    Row,
+};
 
 use cqrs_es2::{
     AggregateContext,
@@ -27,345 +32,127 @@ pub struct EventStore<C: ICommand, E: IEvent, A: IAggregate<C, E>> {
 impl<C: ICommand, E: IEvent, A: IAggregate<C, E>>
     EventStore<C, E, A>
 {
-    /// Creates a new `EventStore` from the provided
-    /// database connection.
+    /// Constructor
     pub fn new(conn: PooledConn) -> Self {
-        EventStore {
+        let x = Self {
             conn,
             _phantom: PhantomData,
-        }
-    }
-
-    fn load_aggregate_from_snapshot(
-        &mut self,
-        aggregate_id: &str,
-    ) -> Result<AggregateContext<C, E, A>, Error> {
-        let agg_type = A::aggregate_type();
-        let id = aggregate_id.to_string();
-
-        let rows = match self
-            .conn
-            .query(SELECT_SNAPSHOT, &[&agg_type, &id])
-        {
-            Ok(x) => x,
-            Err(e) => {
-                return Err(Error::new(
-                    format!(
-                        "could not load events table for aggregate \
-                         id '{}' with error: {}",
-                        &id, e
-                    )
-                    .as_str(),
-                ));
-            },
         };
 
-        let row = match rows.iter().next() {
-            None => {
-                return Ok(AggregateContext::new(
-                    id,
-                    A::default(),
-                    0,
-                ));
-            },
-            Some(x) => x,
-        };
+        trace!("Created new sync MySQL event store");
 
-        let aggregate = match serde_json::from_value(row.get(1)) {
-            Ok(x) => x,
-            Err(e) => {
-                return Err(Error::new(
-                    format!(
-                        "bad payload found in events table for \
-                         aggregate id '{}' with error: {}",
-                        &id, e
-                    )
-                    .as_str(),
-                ));
-            },
-        };
-
-        let s: i64 = row.get(0);
-
-        Ok(AggregateContext::new(
-            id, aggregate, s as usize,
-        ))
-    }
-
-    fn load_aggregate_from_events(
-        &mut self,
-        aggregate_id: &str,
-    ) -> Result<AggregateContext<C, E, A>, Error> {
-        let id = aggregate_id.to_string();
-
-        let events = match self.load_events(&id, false) {
-            Ok(x) => x,
-            Err(e) => {
-                return Err(e);
-            },
-        };
-
-        if events.len() == 0 {
-            return Ok(AggregateContext::new(
-                id,
-                A::default(),
-                0,
-            ));
-        }
-
-        let mut aggregate = A::default();
-
-        events
-            .iter()
-            .map(|x| &x.payload)
-            .for_each(|x| aggregate.apply(&x));
-
-        Ok(AggregateContext::new(
-            id,
-            aggregate,
-            events.last().unwrap().sequence,
-        ))
-    }
-
-    fn commit_with_snapshots(
-        &mut self,
-        events: Vec<E>,
-        context: AggregateContext<C, E, A>,
-        metadata: HashMap<String, String>,
-    ) -> Result<Vec<EventContext<C, E>>, Error> {
-        let mut updated_aggregate = context.aggregate.clone();
-
-        let agg_type = A::aggregate_type().to_string();
-        let aggregate_id = context.aggregate_id.as_str();
-        let current_sequence = context.current_sequence;
-
-        let wrapped_events = self.wrap_events(
-            aggregate_id,
-            current_sequence,
-            events,
-            metadata,
-        );
-
-        let mut trans = match self.conn.transaction() {
-            Ok(x) => x,
-            Err(e) => {
-                return Err(Error::TechnicalError(e.to_string()));
-            },
-        };
-
-        let mut last_sequence = current_sequence as i64;
-
-        for event in wrapped_events.clone() {
-            let id = context.aggregate_id.clone();
-            let sequence = event.sequence as i64;
-            last_sequence = sequence;
-
-            let payload = match serde_json::to_value(&event.payload) {
-                Ok(x) => x,
-                Err(e) => {
-                    panic!(
-                        "bad payload found in events table for \
-                         aggregate id '{}' with error: {}",
-                        &id, e
-                    );
-                },
-            };
-
-            let metadata = match serde_json::to_value(&event.metadata)
-            {
-                Ok(x) => x,
-                Err(e) => {
-                    panic!(
-                        "bad metadata found in events table for \
-                         aggregate id '{}' with error: {}",
-                        &id, e
-                    );
-                },
-            };
-
-            match trans.execute(
-                INSERT_EVENT,
-                &[
-                    &agg_type, &id, &sequence, &payload, &metadata,
-                ],
-            ) {
-                Ok(_) => {},
-                Err(e) => {
-                    match e.code() {
-                        None => {},
-                        Some(state) => {
-                            if state.code() == "23505" {
-                                return Err(Error::TechnicalError(
-                                    "optimistic lock error"
-                                        .to_string(),
-                                ));
-                            }
-                        },
-                    }
-                    panic!(
-                        "unable to insert event table for aggregate \
-                         id '{}' with error: {}\n  and payload: {}",
-                        &id, e, &payload
-                    );
-                },
-            };
-
-            updated_aggregate.apply(&event.payload);
-        }
-
-        let aggregate_payload =
-            match serde_json::to_value(updated_aggregate) {
-                Ok(x) => x,
-                Err(e) => {
-                    panic!(
-                        "bad metadata found in events table for \
-                         aggregate id '{}' with error: {}",
-                        &aggregate_id, e
-                    );
-                },
-            };
-
-        let sql = match context.current_sequence {
-            0 => INSERT_SNAPSHOT,
-            _ => UPDATE_SNAPSHOT,
-        };
-
-        match trans.execute(
-            sql,
-            &[
-                &last_sequence,
-                &aggregate_payload,
-                &agg_type,
-                &aggregate_id,
-            ],
-        ) {
-            Ok(_) => {},
-            Err(e) => {
-                panic!(
-                    "unable to insert snapshot for aggregate id \
-                     '{}' with error: {}\n  and payload: {}",
-                    &aggregate_id, e, &aggregate_payload
-                );
-            },
-        };
-
-        match trans.commit() {
-            Ok(_) => Ok(wrapped_events),
-            Err(e) => Err(Error::TechnicalError(e.to_string())),
-        }
-    }
-
-    fn commit_events_only(
-        &mut self,
-        events: Vec<E>,
-        context: AggregateContext<C, E, A>,
-        metadata: HashMap<String, String>,
-    ) -> Result<Vec<EventContext<C, E>>, Error> {
-        let agg_type = A::aggregate_type().to_string();
-        let id = context.aggregate_id.as_str();
-        let current_sequence = context.current_sequence;
-
-        let events =
-            self.wrap_events(&id, current_sequence, events, metadata);
-
-        let mut trans = match self.conn.transaction() {
-            Ok(x) => x,
-            Err(e) => {
-                return Err(Error::TechnicalError(e.to_string()));
-            },
-        };
-
-        for event in &events {
-            let sequence = event.sequence as i64;
-
-            let payload = match serde_json::to_value(&event.payload) {
-                Ok(x) => x,
-                Err(e) => {
-                    return Err(Error::new(
-                        format!(
-                            "Could not serialize the event payload \
-                             for aggregate id '{}' with error: {}",
-                            &id, e
-                        )
-                        .as_str(),
-                    ));
-                },
-            };
-
-            let metadata = match serde_json::to_value(&event.metadata)
-            {
-                Ok(x) => x,
-                Err(e) => {
-                    return Err(Error::new(
-                        format!(
-                            "could not serialize the event metadata \
-                             for aggregate id '{}' with error: {}",
-                            &id, e
-                        )
-                        .as_str(),
-                    ));
-                },
-            };
-
-            match trans.execute(
-                INSERT_EVENT,
-                &[
-                    &agg_type, &id, &sequence, &payload, &metadata,
-                ],
-            ) {
-                Ok(_) => {},
-                Err(e) => {
-                    match e.code() {
-                        None => {},
-                        Some(state) => {
-                            if state.code() == "23505" {
-                                return Err(Error::TechnicalError(
-                                    "optimistic lock error"
-                                        .to_string(),
-                                ));
-                            }
-                        },
-                    }
-                    return Err(Error::TechnicalError(format!(
-                        "unable to insert event table for aggregate \
-                         id '{}' with error: {}\n  and payload: {}",
-                        &id, e, &payload
-                    )));
-                },
-            };
-        }
-
-        match trans.commit() {
-            Ok(_) => Ok(events),
-            Err(e) => Err(Error::TechnicalError(e.to_string())),
-        }
+        x
     }
 }
 
 impl<C: ICommand, E: IEvent, A: IAggregate<C, E>> IEventStore<C, E, A>
     for EventStore<C, E, A>
 {
+    /// Save new events
+    fn save_events(
+        &mut self,
+        contexts: &Vec<EventContext<C, E>>,
+    ) -> Result<(), Error> {
+        if contexts.len() == 0 {
+            trace!("Skip saving zero contexts");
+            return Ok(());
+        }
+
+        let aggregate_type = A::aggregate_type();
+
+        let aggregate_id = contexts
+            .first()
+            .unwrap()
+            .aggregate_id
+            .clone();
+
+        debug!(
+            "storing '{}' new events for aggregate id '{}'",
+            contexts.len(),
+            &aggregate_id
+        );
+
+        for context in contexts {
+            let payload =
+                match serde_json::to_string(&context.payload) {
+                    Ok(x) => x,
+                    Err(e) => {
+                        return Err(Error::new(
+                            format!(
+                                "unable to serialize the event \
+                                 payload for aggregate id '{}' with \
+                                 error: {}",
+                                &aggregate_id, e
+                            )
+                            .as_str(),
+                        ));
+                    },
+                };
+
+            let metadata =
+                match serde_json::to_string(&context.metadata) {
+                    Ok(x) => x,
+                    Err(e) => {
+                        return Err(Error::new(
+                            format!(
+                                "unable to serialize the event \
+                                 metadata for aggregate id '{}' \
+                                 with error: {}",
+                                &aggregate_id, e
+                            )
+                            .as_str(),
+                        ));
+                    },
+                };
+
+            match self.conn.exec_drop(
+                INSERT_EVENT,
+                (
+                    &aggregate_type,
+                    &aggregate_id,
+                    context.sequence,
+                    &payload,
+                    &metadata,
+                ),
+            ) {
+                Ok(_) => {},
+                Err(e) => {
+                    return Err(Error::new(
+                        format!(
+                            "unable to insert new event for \
+                             aggregate id '{}' with error: {}",
+                            &aggregate_id, e
+                        )
+                        .as_str(),
+                    ));
+                },
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Load all events for a particular `aggregate_id`
     fn load_events(
         &mut self,
         aggregate_id: &str,
-        with_metadata: bool,
     ) -> Result<Vec<EventContext<C, E>>, Error> {
-        let agg_type = A::aggregate_type();
+        let aggregate_type = A::aggregate_type();
 
-        let sql = match with_metadata {
-            true => SELECT_EVENTS_WITH_METADATA,
-            false => SELECT_EVENTS,
-        };
+        trace!(
+            "loading events for aggregate id '{}'",
+            aggregate_id
+        );
 
-        let rows = match self
-            .conn
-            .query(sql, &[&agg_type, &aggregate_id])
-        {
+        let rows: Vec<(i64, String, String)> = match self.conn.exec(
+            SELECT_EVENTS,
+            (&aggregate_type, &aggregate_id),
+        ) {
             Ok(x) => x,
             Err(e) => {
                 return Err(Error::new(
                     format!(
-                        "could not load events table for aggregate \
+                        "unable to load events table for aggregate \
                          id '{}' with error: {}",
                         &aggregate_id, e
                     )
@@ -376,10 +163,8 @@ impl<C: ICommand, E: IEvent, A: IAggregate<C, E>> IEventStore<C, E, A>
 
         let mut result = Vec::new();
 
-        for row in rows.iter() {
-            let sequence: i64 = row.get(0);
-
-            let payload = match serde_json::from_value(row.get(1)) {
+        for row in rows {
+            let payload = match serde_json::from_str(row.1.as_str()) {
                 Ok(x) => x,
                 Err(e) => {
                     return Err(Error::new(
@@ -393,29 +178,24 @@ impl<C: ICommand, E: IEvent, A: IAggregate<C, E>> IEventStore<C, E, A>
                 },
             };
 
-            let metadata = match with_metadata {
-                true => {
-                    match serde_json::from_value(row.get(2)) {
-                        Ok(x) => x,
-                        Err(e) => {
-                            return Err(Error::new(
-                                format!(
-                                    "bad metadata found in events \
-                                     table for aggregate id '{}' \
-                                     with error: {}",
-                                    &aggregate_id, e
-                                )
-                                .as_str(),
-                            ));
-                        },
-                    }
+            let metadata = match serde_json::from_str(row.2.as_str())
+            {
+                Ok(x) => x,
+                Err(e) => {
+                    return Err(Error::new(
+                        format!(
+                            "bad metadata found in events table for \
+                             aggregate id '{}' with error: {}",
+                            &aggregate_id, e
+                        )
+                        .as_str(),
+                    ));
                 },
-                false => Default::default(),
             };
 
             result.push(EventContext::new(
                 aggregate_id.to_string(),
-                sequence as usize,
+                row.0,
                 payload,
                 metadata,
             ));
@@ -424,29 +204,131 @@ impl<C: ICommand, E: IEvent, A: IAggregate<C, E>> IEventStore<C, E, A>
         Ok(result)
     }
 
-    fn load_aggregate(
+    /// save a new aggregate snapshot
+    fn save_aggregate_snapshot(
+        &mut self,
+        context: AggregateContext<C, E, A>,
+    ) -> Result<(), Error> {
+        let aggregate_type = A::aggregate_type();
+
+        let aggregate_id = context.aggregate_id;
+
+        debug!(
+            "storing a new snapshot for aggregate id '{}'",
+            &aggregate_id
+        );
+
+        let sql = match context.version {
+            1 => INSERT_SNAPSHOT,
+            _ => UPDATE_SNAPSHOT,
+        };
+
+        let payload = match serde_json::to_string(&context.payload) {
+            Ok(x) => x,
+            Err(e) => {
+                return Err(Error::new(
+                    format!(
+                        "unable to serialize aggregate snapshot for \
+                         aggregate id '{}' with error: {}",
+                        &aggregate_id, e
+                    )
+                    .as_str(),
+                ));
+            },
+        };
+
+        match self.conn.exec_drop(
+            sql,
+            (
+                context.version,
+                &payload,
+                &aggregate_type,
+                &aggregate_id,
+            ),
+        ) {
+            Ok(_) => {},
+            Err(e) => {
+                return Err(Error::new(
+                    format!(
+                        "unable to insert/update snapshot for \
+                         aggregate id '{}' with error: {}",
+                        &aggregate_id, e
+                    )
+                    .as_str(),
+                ));
+            },
+        };
+
+        Ok(())
+    }
+
+    /// Load aggregate at current state from snapshots
+    fn load_aggregate_from_snapshot(
         &mut self,
         aggregate_id: &str,
     ) -> Result<AggregateContext<C, E, A>, Error> {
-        match self.with_snapshots {
-            true => self.load_aggregate_from_snapshot(aggregate_id),
-            false => self.load_aggregate_from_events(aggregate_id),
-        }
-    }
+        let aggregate_type = A::aggregate_type();
 
-    fn commit(
-        &mut self,
-        events: Vec<E>,
-        context: AggregateContext<C, E, A>,
-        metadata: HashMap<String, String>,
-    ) -> Result<Vec<EventContext<C, E>>, Error> {
-        match self.with_snapshots {
-            true => {
-                self.commit_with_snapshots(events, context, metadata)
+        trace!(
+            "loading snapshot for aggregate id '{}'",
+            aggregate_id
+        );
+
+        let result: Option<Row> = match self.conn.exec_first(
+            SELECT_SNAPSHOT,
+            (&aggregate_type, &aggregate_id),
+        ) {
+            Ok(x) => x,
+            Err(e) => {
+                return Err(Error::new(
+                    format!(
+                        "unable to load snapshots table for \
+                         aggregate id '{}' with error: {}",
+                        &aggregate_id, e
+                    )
+                    .as_str(),
+                ));
             },
-            false => {
-                self.commit_events_only(events, context, metadata)
+        };
+
+        let row = match result {
+            Some(x) => x,
+            None => {
+                trace!(
+                    "returning default aggregate for aggregate id \
+                     '{}'",
+                    aggregate_id
+                );
+
+                return Ok(AggregateContext::new(
+                    aggregate_id.to_string(),
+                    0,
+                    A::default(),
+                ));
             },
-        }
+        };
+
+        let version: i64 = row.get(0).unwrap();
+        let payload: String = row.get(1).unwrap();
+
+        let payload = match serde_json::from_str(payload.as_str()) {
+            Ok(x) => x,
+            Err(e) => {
+                return Err(Error::new(
+                    format!(
+                        "bad payload found in snapshots table for \
+                         aggregate id '{}' with error: {}",
+                        &aggregate_id, e
+                    )
+                    .as_str(),
+                ));
+            },
+        };
+
+        Ok(AggregateContext::new(
+            aggregate_id.to_string(),
+            version,
+            payload,
+        ))
     }
 }

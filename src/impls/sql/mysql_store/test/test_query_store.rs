@@ -23,12 +23,6 @@ type ThisQueryStore = QueryStore<
     CustomerContactQuery,
 >;
 
-type ThisQueryContext = QueryContext<
-    CustomerCommand,
-    CustomerEvent,
-    CustomerContactQuery,
->;
-
 fn check_save_load_queries(uri: &str) -> Result<(), Error> {
     let opts = Opts::from_url(uri)?;
     let pool = Pool::new(opts)?;

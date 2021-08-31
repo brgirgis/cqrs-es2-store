@@ -22,11 +22,6 @@ use super::common::*;
 type ThisEventStore =
     EventStore<CustomerCommand, CustomerEvent, Customer>;
 
-type ThisAggregateContext =
-    AggregateContext<CustomerCommand, CustomerEvent, Customer>;
-
-type ThisEventContext = EventContext<CustomerCommand, CustomerEvent>;
-
 pub fn get_metadata() -> HashMap<String, String> {
     let now = "2021-03-18T12:32:45.930Z".to_string();
     let mut metadata = HashMap::new();

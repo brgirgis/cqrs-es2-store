@@ -4,7 +4,11 @@ use log::{
 };
 use std::marker::PhantomData;
 
-use mysql::PooledConn;
+use mysql::{
+    prelude::Queryable,
+    PooledConn,
+    Row,
+};
 
 use cqrs_es2::{
     Error,
@@ -81,8 +85,7 @@ impl<
             _ => UPDATE_QUERY,
         };
 
-        // let query_instance_id = &self.query_instance_id;
-        let payload = match serde_json::to_value(&context.payload) {
+        let payload = match serde_json::to_string(&context.payload) {
             Ok(x) => x,
             Err(e) => {
                 return Err(Error::new(
@@ -96,21 +99,30 @@ impl<
             },
         };
 
-        match self.conn.execute(
+        match self.conn.exec_drop(
             sql,
-            &[
+            (
                 context.version,
                 &payload,
                 &aggregate_type,
                 &aggregate_id,
                 &query_type,
-            ],
+            ),
         ) {
-            Ok(_) => Ok(()),
+            Ok(_) => {},
             Err(e) => {
-                return Err(Error::new(e.to_string().as_str()));
+                return Err(Error::new(
+                    format!(
+                        "unable to insert/update query for \
+                         aggregate id '{}' with error: {}",
+                        &aggregate_id, e
+                    )
+                    .as_str(),
+                ));
             },
-        }
+        };
+
+        Ok(())
     }
 
     /// loads the most recent query
@@ -127,42 +139,65 @@ impl<
             aggregate_id
         );
 
-        let result = match self.conn.query(
+        let result: Option<Row> = match self.conn.exec_first(
             SELECT_QUERY,
-            &[
+            (
                 &aggregate_type,
                 &aggregate_id,
                 &query_type,
-            ],
+            ),
         ) {
             Ok(x) => x,
             Err(e) => {
-                return Err(Error::new(e.to_string().as_str()));
+                return Err(Error::new(
+                    format!(
+                        "unable to load queries table for query \
+                         '{}' with aggregate id '{}', error: {}",
+                        &query_type, &aggregate_id, e,
+                    )
+                    .as_str(),
+                ));
             },
         };
 
-        let row = match result.iter().next() {
+        let row = match result {
             Some(x) => x,
             None => {
+                trace!(
+                    "returning default query '{}' for aggregate id \
+                     '{}'",
+                    query_type,
+                    aggregate_id
+                );
+
                 return Ok(QueryContext::new(
-                    aggregate_id,
+                    aggregate_id.to_string(),
                     0,
                     Default::default(),
                 ));
             },
         };
 
-        let version = row.get(0);
+        let version: i64 = row.get(0).unwrap();
+        let payload: String = row.get(1).unwrap();
 
-        let payload = match serde_json::from_value(row.get(1)) {
+        let payload = match serde_json::from_str(payload.as_str()) {
             Ok(x) => x,
             Err(e) => {
-                return Err(Error::new(e.to_string().as_str()));
+                return Err(Error::new(
+                    format!(
+                        "bad payload found in queries table for \
+                         query '{}' with aggregate id '{}', error: \
+                         {}",
+                        &query_type, &aggregate_id, e,
+                    )
+                    .as_str(),
+                ));
             },
         };
 
         Ok(QueryContext::new(
-            aggregate_id,
+            aggregate_id.to_string(),
             version,
             payload,
         ))
