@@ -15,7 +15,7 @@ with-postgres = ["postgres", "cqrs-es2-store/with-postgres"]
 with-mysql = ["mysql", "cqrs-es2-store/with-mysql"]
 with-mariadb = ["mysql", "cqrs-es2-store/with-mysql"]
 #with-mssql = ["sql", "cqrs-es2-store/with-mssql"]
-with-sqlite = ["sqlite", "cqrs-es2-store/with-sqlite"]
+with-sqlite = ["rusqlite", "cqrs-es2-store/with-sqlite"]
 
 # documents DBs
 with-mongodb = ["mongodb", "cqrs-es2-store/with-mongodb"]
@@ -50,7 +50,9 @@ postgres = { version = "^0.19.1", default-features = false, features = [
 ], optional = true }
 
 # sqlite driver
-sqlite = { version = "^0.26.0", default-features = false, optional = true }
+rusqlite = { version = "^0.25.3", default-features = false, features = [
+  "bundled",
+], optional = true }
 
 # mongodb
 mongodb = { version = "2.0.0-beta.3", default-features = false, features = [

@@ -1,6 +1,6 @@
 use cqrs_es2::Error;
 
-use tokio_cqrs_es2_store::{
+use cqrs_es2_store::{
     sqlite_store::{
         EventStore,
         QueryStore,

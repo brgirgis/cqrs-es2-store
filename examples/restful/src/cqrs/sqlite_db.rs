@@ -1,19 +1,7 @@
-use sqlx::sqlite::{
-    SqliteConnectOptions,
-    SqlitePool,
-    SqlitePoolOptions,
-};
+use rusqlite::Connection;
 
-pub fn db_connection() -> Result<SqlitePool, sqlx::Error> {
-    let options = SqliteConnectOptions::new()
-        .filename("test.db")
-        .create_if_missing(true);
+pub fn db_connection() -> Result<Connection, rusqlite::Error> {
+    let conn = Connection::open("test.db").unwrap();
 
-    let pool = SqlitePoolOptions::new()
-        .max_connections(5)
-        .connect_with(options)
-        .await
-        .unwrap();
-
-    Ok(pool)
+    Ok(conn)
 }
